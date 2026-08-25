@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>PC Bang Control</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    :root {
+      --bg: #0a0a0f; --surface: #13131a; --border: #1e1e2e;
+      --accent: #3b82f6; --danger: #ef4444; --danger-dim: rgba(239,68,68,0.15);
+      --green: #22c55e; --yellow: #f59e0b;
+      --text: #e2e8f0; --muted: #64748b;
+    }
+    body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif; min-height: 100dvh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+
+    /* HEADER */
+    .header { padding: 20px 20px 0; display: flex; align-items: center; justify-content: space-between; }
+    .header-left .title { font-size: 22px; font-weight: 700; }
+    .header-left .sub { font-size: 12px; color: var(--muted); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+    .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: blink 1.5s infinite; flex-shrink: 0; }
+    .live-dot.off { background: var(--muted); animation: none; }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.3} }
+    .header-btns { display: flex; gap: 8px; }
+    .hdr-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); width: 38px; height: 38px; border-radius: 10px; font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .hdr-btn:active { background: var(--border); }
+    .spinning { animation: spin 0.6s linear; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* STATUS */
+    .status-bar { margin: 16px 20px 0; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
+    .status-count { display: flex; gap: 20px; }
+    .count-item { text-align: center; }
+    .count-num { font-size: 24px; font-weight: 700; line-height: 1; }
+    .count-num.green { color: var(--green); }
+    .count-num.muted { color: var(--muted); }
+    .count-label { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .last-update { font-size: 11px; color: var(--muted); text-align: right; line-height: 1.6; }
+
+    /* ACTION BUTTONS */
+    .action-btns { padding: 14px 20px 0; display: flex; gap: 8px; }
+    .action-btn { flex: 1; border-radius: 14px; padding: 13px 8px; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid; }
+    .btn-shutdown { background: var(--danger-dim); border-color: var(--danger); color: var(--danger); }
+    .btn-shutdown:disabled { opacity: 0.4; cursor: default; }
+    .btn-msg { background: rgba(245,158,11,0.15); border-color: var(--yellow); color: var(--yellow); }
+    .btn-msg:disabled { opacity: 0.4; cursor: default; }
+
+    /* PC LIST */
+    .section-label { padding: 18px 20px 10px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+    .pc-list { padding: 0 20px 30px; display: flex; flex-direction: column; gap: 8px; }
+    .pc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .pc-card.online { border-color: rgba(34,197,94,0.3); }
+    .pc-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+    .pc-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+    .pc-dot.online { background: var(--green); box-shadow: 0 0 8px var(--green); animation: blink 2s infinite; }
+    .pc-name { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pc-status { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .pc-status.online { color: var(--green); }
+    .pc-actions { display: flex; gap: 5px; flex-shrink: 0; }
+    .ic-btn { border-radius: 10px; padding: 8px 10px; font-size: 15px; cursor: pointer; border: 1px solid; }
+    .ic-sd { background: var(--danger-dim); border-color: rgba(239,68,68,0.4); }
+    .ic-msg { background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.4); }
+    .ic-del { background: rgba(100,116,139,0.15); border-color: rgba(100,116,139,0.3); }
+
+    /* EMPTY */
+    .empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+    .empty-icon { font-size: 36px; margin-bottom: 10px; }
+
+    /* MODAL */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); display: flex; align-items: flex-end; justify-content: center; padding: 0 16px 32px; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .modal-overlay.show { opacity: 1; pointer-events: all; }
+    .modal { background: #1a1a28; border: 1px solid var(--border); border-radius: 20px; padding: 24px 20px 20px; width: 100%; max-width: 400px; transform: translateY(20px); transition: transform 0.2s; }
+    .modal-overlay.show .modal { transform: translateY(0); }
+    .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .modal-desc { font-size: 14px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+    .modal-textarea { width: 100%; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 12px; padding: 12px 14px; font-size: 14px; outline: none; resize: none; height: 100px; font-family: inherit; margin-bottom: 16px; }
+    .modal-textarea:focus { border-color: var(--yellow); }
+    .modal-btns { display: flex; gap: 10px; }
+    .modal-cancel { flex: 1; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 12px; padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .modal-confirm { flex: 1; border: none; color: white; border-radius: 12px; padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .modal-confirm.danger { background: var(--danger); }
+    .modal-confirm.yellow { background: var(--yellow); color: #000; }
+    .modal-confirm.gray { background: #475569; }
+    .modal-confirm.red2 { background: #7f1d1d; }
+
+    /* TOAST */
+    .toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%) translateY(-20px); background: #1e1e2e; border: 1px solid var(--border); border-radius: 20px; padding: 10px 18px; font-size: 13px; white-space: nowrap; opacity: 0; transition: opacity 0.2s, transform 0.2s; z-index: 200; pointer-events: none; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* SETUP */
+    .setup { padding: 40px 24px; min-height: 100dvh; display: flex; flex-direction: column; justify-content: center; }
+    .setup-title { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+    .setup-sub { font-size: 14px; color: var(--muted); margin-bottom: 28px; line-height: 1.6; }
+    .setup-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; font-weight: 500; }
+    .setup-input { width: 100%; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 12px; padding: 14px 16px; font-size: 14px; outline: none; margin-bottom: 16px; -webkit-appearance: none; }
+    .setup-input:focus { border-color: var(--accent); }
+    .setup-btn { width: 100%; background: var(--accent); border: none; color: white; border-radius: 14px; padding: 15px; font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 4px; }
+    .setup-divider { border: none; border-top: 1px solid var(--border); margin: 4px 0 16px; }
+  </style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div class="setup" id="setupScreen" style="display:none">
+  <div class="setup-title">⚙️ Тохиргоо</div>
+  <div class="setup-sub">Нэг удаа тохируулбал хадгалагдана.</div>
+  <div class="setup-label">Firebase Realtime Database URL</div>
+  <input class="setup-input" type="url" id="urlInput"
+    placeholder="https://your-project-default-rtdb.region.firebasedatabase.app"
+    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  <hr class="setup-divider">
+  <div class="setup-label">🔑 Нууц түлхүүр</div>
+  <input class="setup-input" type="password" id="keyInput"
+    placeholder="Нууц түлхүүрээ оруулна"
+    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  <button class="setup-btn" onclick="saveSetup()">Холбогдох →</button>
+</div>
+
+<!-- MAIN -->
+<div id="mainScreen" style="display:none">
+  <div class="header">
+    <div class="header-left">
+      <div class="title">PC Bang</div>
+      <div class="sub">
+        <span class="live-dot off" id="liveDot"></span>
+        <span id="headerSub">Холбогдож байна...</span>
+      </div>
+    </div>
+    <div class="header-btns">
+      <!-- Refresh товч -->
+      <button class="hdr-btn" id="refreshBtn" onclick="manualRefresh()" title="Шинэчлэх">↻</button>
+      <!-- Settings / reset товч -->
+      <button class="hdr-btn" onclick="openSettings()" title="Тохиргоо">⚙️</button>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-count">
+      <div class="count-item">
+        <div class="count-num green" id="onlineCount">—</div>
+        <div class="count-label">ONLINE</div>
+      </div>
+      <div class="count-item">
+        <div class="count-num muted" id="totalCount">—</div>
+        <div class="count-label">НИЙТ</div>
+      </div>
+    </div>
+    <div class="last-update" id="lastUpdate">—</div>
+  </div>
+
+  <div class="action-btns">
+    <button class="action-btn btn-shutdown" id="allBtn" onclick="confirmAll('shutdown')" disabled>⏻ Бүгд унтраах</button>
+    <button class="action-btn btn-msg" id="allMsgBtn" onclick="confirmAll('message')" disabled>💬 Бүгдэд мессеж</button>
+  </div>
+
+  <div class="section-label">КОМПЬЮТЕРҮҮД</div>
+  <div class="pc-list" id="pcList">
+    <div class="empty"><div class="empty-icon">⏳</div><div>Холбогдож байна...</div></div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle"></div>
+    <div class="modal-desc" id="modalDesc"></div>
+    <textarea class="modal-textarea" id="modalTextarea" style="display:none" placeholder="Мессеж бичнэ үү..."></textarea>
+    <div class="modal-btns">
+      <button class="modal-cancel" onclick="closeModal()">Болих</button>
+      <button class="modal-confirm" id="modalConfirm" onclick="doConfirm()">Тийм</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const ONLINE_TIMEOUT = 15;
+  let FIREBASE_URL = '';
+  let SECRET_KEY = '';
+  let allPcData = {};
+  let confirmAction = null;
+  let eventSource = null;
+
+  // ── Init ─────────────────────────────────
+  function init() {
+    const url = localStorage.getItem('pcbang_url');
+    const key = localStorage.getItem('pcbang_key');
+    if (url && key) {
+      FIREBASE_URL = url;
+      SECRET_KEY = key;
+      document.getElementById('mainScreen').style.display = '';
+      startStreaming();
+    } else {
+      document.getElementById('setupScreen').style.display = '';
+    }
+  }
+
+  function saveSetup() {
+    const url = document.getElementById('urlInput').value.trim().replace(/\/$/, '');
+    const key = document.getElementById('keyInput').value.trim();
+    if (!url.startsWith('https://')) { showToast('⚠️ Firebase URL буруу'); return; }
+    if (!key) { showToast('⚠️ Нууц түлхүүр хоосон'); return; }
+    localStorage.setItem('pcbang_url', url);
+    localStorage.setItem('pcbang_key', key);
+    FIREBASE_URL = url; SECRET_KEY = key;
+    document.getElementById('setupScreen').style.display = 'none';
+    document.getElementById('mainScreen').style.display = '';
+    startStreaming();
+  }
+
+  // Settings / reset
+  function openSettings() {
+    confirmAction = { type: 'settings' };
+    document.getElementById('modalTitle').textContent = '⚙️ Тохиргоо';
+    document.getElementById('modalDesc').textContent = 'Тохиргоог устгаад шинэ URL болон нууц түлхүүр оруулах уу?';
+    document.getElementById('modalTextarea').style.display = 'none';
+    const btn = document.getElementById('modalConfirm');
+    btn.textContent = 'Дахин тохируулах'; btn.className = 'modal-confirm red2';
+    openModal();
+  }
+
+  function resetSettings() {
+    if (eventSource) eventSource.close();
+    localStorage.removeItem('pcbang_url');
+    localStorage.removeItem('pcbang_key');
+    FIREBASE_URL = ''; SECRET_KEY = '';
+    allPcData = {};
+    document.getElementById('mainScreen').style.display = 'none';
+    document.getElementById('setupScreen').style.display = '';
+    document.getElementById('urlInput').value = '';
+    document.getElementById('keyInput').value = '';
+  }
+
+  // ── Firebase paths ────────────────────────
+  function pcsPath() { return `pcs/${SECRET_KEY}`; }
+  function pcPath(name) { return `pcs/${SECRET_KEY}/${name}`; }
+
+  // ── Streaming ─────────────────────────────
+  function startStreaming() {
+    if (eventSource) eventSource.close();
+    const url = `${FIREBASE_URL}/${pcsPath()}.json`;
+    eventSource = new EventSource(url);
+
+    eventSource.addEventListener('put', e => {
+      const parsed = JSON.parse(e.data);
+      allPcData = parsed.data || {};
+      renderPCs();
+      setLive(true);
+    });
+
+    eventSource.addEventListener('patch', e => {
+      const parsed = JSON.parse(e.data);
+      if (parsed.data) { Object.assign(allPcData, parsed.data); renderPCs(); }
+      setLive(true);
+    });
+
+    eventSource.onerror = () => {
+      setLive(false);
+      setTimeout(startStreaming, 3000);
+    };
+  }
+
+  // Manual refresh
+  function manualRefresh() {
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('spinning');
+    // Streaming дахин эхлүүлнэ
+    startStreaming();
+    setTimeout(() => btn.classList.remove('spinning'), 800);
+    showToast('🔄 Шинэчлэгдлээ');
+  }
+
+  function setLive(on) {
+    document.getElementById('liveDot').classList.toggle('off', !on);
+    if (!on) document.getElementById('headerSub').textContent = 'Дахин холбогдож байна...';
+  }
+
+  // ── Firebase ──────────────────────────────
+  async function fbPut(path, value) {
+    await fetch(`${FIREBASE_URL}/${path}.json`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(value)
+    });
+  }
+
+  async function fbDelete(path) {
+    await fetch(`${FIREBASE_URL}/${path}.json`, { method: 'DELETE' });
+  }
+
+  // ── Render ────────────────────────────────
+  function renderPCs() {
+    const now = Math.floor(Date.now() / 1000);
+    const names = Object.keys(allPcData).filter(n => allPcData[n] && typeof allPcData[n] === 'object').sort();
+    let onlineCount = 0, html = '';
+
+    names.forEach(name => {
+      const d = allPcData[name];
+      const isOnline = (now - (d.last_seen || 0)) < ONLINE_TIMEOUT;
+      if (isOnline) onlineCount++;
+      const ago = isOnline ? 'Идэвхтэй' : d.last_seen ? timeAgo(now - d.last_seen) + ' өмнө' : 'Мэдээлэл алга';
+
+      html += `<div class="pc-card ${isOnline ? 'online' : ''}">
+        <div class="pc-info">
+          <div class="pc-dot ${isOnline ? 'online' : ''}"></div>
+          <div>
+            <div class="pc-name">${name}</div>
+            <div class="pc-status ${isOnline ? 'online' : ''}">${ago}</div>
+          </div>
+        </div>
+        <div class="pc-actions">
+          ${isOnline ? `
+            <button class="ic-btn ic-sd" onclick="confirmOne('shutdown','${name}')">⏻</button>
+            <button class="ic-btn ic-msg" onclick="confirmOne('message','${name}')">💬</button>
+          ` : ''}
+          <button class="ic-btn ic-del" onclick="confirmOne('remove','${name}')">🗑️</button>
+        </div>
+      </div>`;
+    });
+
+    if (!names.length) html = `<div class="empty"><div class="empty-icon">🖥️</div><div>PC бүртгэгдээгүй байна</div></div>`;
+
+    document.getElementById('pcList').innerHTML = html;
+    document.getElementById('onlineCount').textContent = onlineCount;
+    document.getElementById('totalCount').textContent = names.length;
+    document.getElementById('allBtn').disabled = !onlineCount;
+    document.getElementById('allMsgBtn').disabled = !onlineCount;
+
+    const t = new Date();
+    document.getElementById('lastUpdate').textContent =
+      `Шинэчлэгдсэн\n${t.getHours()}:${String(t.getMinutes()).padStart(2,'0')}:${String(t.getSeconds()).padStart(2,'0')}`;
+    document.getElementById('headerSub').textContent = `${onlineCount} PC онлайн • Шууд`;
+  }
+
+  // ── Modal ─────────────────────────────────
+  function confirmOne(type, name) {
+    confirmAction = { type, name, all: false };
+    setupModal(type, name);
+    openModal();
+  }
+
+  function confirmAll(type) {
+    confirmAction = { type, all: true };
+    setupModal(type, 'бүх PC');
+    openModal();
+  }
+
+  function setupModal(type, target) {
+    const ta = document.getElementById('modalTextarea');
+    const btn = document.getElementById('modalConfirm');
+    ta.style.display = 'none';
+
+    if (type === 'shutdown') {
+      document.getElementById('modalTitle').textContent = `${target} унтраах уу?`;
+      document.getElementById('modalDesc').textContent = `${target}-г force shutdown хийнэ.`;
+      btn.textContent = 'Унтраах'; btn.className = 'modal-confirm danger';
+    } else if (type === 'message') {
+      document.getElementById('modalTitle').textContent = '💬 Мессеж илгээх';
+      document.getElementById('modalDesc').textContent = `${target}-д дэлгэцийн дээр гарах мессеж:`;
+      ta.style.display = ''; ta.value = '';
+      btn.textContent = 'Илгээх'; btn.className = 'modal-confirm yellow';
+      setTimeout(() => ta.focus(), 300);
+    } else if (type === 'remove') {
+      document.getElementById('modalTitle').textContent = `${target}-г устгах уу?`;
+      document.getElementById('modalDesc').textContent = `${target}-г жагсаалтаас устгана.`;
+      btn.textContent = 'Устгах'; btn.className = 'modal-confirm gray';
+    }
+  }
+
+  function openModal() { document.getElementById('modal').classList.add('show'); }
+  function closeModal() { document.getElementById('modal').classList.remove('show'); }
+
+  async function doConfirm() {
+    closeModal();
+    const a = confirmAction;
+    if (!a) return;
+
+    if (a.type === 'settings') { resetSettings(); return; }
+    if (a.type === 'shutdown') { a.all ? await shutdownAll() : await doShutdown(a.name); }
+    else if (a.type === 'message') {
+      const msg = document.getElementById('modalTextarea').value.trim();
+      if (!msg) { showToast('⚠️ Мессеж хоосон байна'); return; }
+      a.all ? await sendMsgAll(msg) : await sendMsg(a.name, msg);
+    } else if (a.type === 'remove') { await removePC(a.name); }
+  }
+
+  async function doShutdown(name) {
+    try { await fbPut(`${pcPath(name)}/shutdown`, true); showToast(`⏻ ${name} унтраана`); }
+    catch { showToast(`⚠️ ${name} алдаа`); }
+  }
+
+  async function shutdownAll() {
+    const now = Math.floor(Date.now()/1000);
+    const online = Object.keys(allPcData).filter(n => (now-(allPcData[n]?.last_seen||0)) < ONLINE_TIMEOUT);
+    for (const n of online) { try { await fbPut(`${pcPath(n)}/shutdown`, true); } catch {} }
+    showToast(`⏻ ${online.length} PC унтраана`);
+  }
+
+  async function sendMsg(name, msg) {
+    try { await fbPut(`${pcPath(name)}/message`, msg); showToast(`💬 ${name}-д мессеж илгээгдлээ`); }
+    catch { showToast(`⚠️ Алдаа`); }
+  }
+
+  async function sendMsgAll(msg) {
+    const now = Math.floor(Date.now()/1000);
+    const online = Object.keys(allPcData).filter(n => (now-(allPcData[n]?.last_seen||0)) < ONLINE_TIMEOUT);
+    for (const n of online) { try { await fbPut(`${pcPath(n)}/message`, msg); } catch {} }
+    showToast(`💬 ${online.length} PC-д мессеж илгээгдлээ`);
+  }
+
+  async function removePC(name) {
+    const now = Math.floor(Date.now()/1000);
+    const isOnline = allPcData[name] && (now-(allPcData[name]?.last_seen||0)) < ONLINE_TIMEOUT;
+    try {
+      if (isOnline) { await fbPut(`${pcPath(name)}/remove`, true); showToast(`🗑️ ${name}-д устгах команд`); }
+      else { await fbDelete(pcPath(name)); showToast(`🗑️ ${name} устгагдлаа`); }
+    } catch { showToast(`⚠️ Алдаа`); }
+  }
+
+  let toastTimer;
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  }
+
+  function timeAgo(sec) {
+    if (sec < 60) return `${sec}с`;
+    if (sec < 3600) return `${Math.floor(sec/60)}м`;
+    return `${Math.floor(sec/3600)}ц`;
+  }
+
+  document.getElementById('modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('modal')) closeModal();
+  });
+
+  init();
+</script>
+</body>
+</html>
